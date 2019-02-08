@@ -1,0 +1,410 @@
+---
+title: "Project MSG500-MVE190 Linear Statistical Models"
+author: "Stefan Eng & Masood Bagheri"
+output: html_notebook
+---
+
+```{r setup, include=FALSE, echo=FALSE}
+library(knitr)
+opts_chunk$set(echo = FALSE, warning = FALSE)
+opts_knit$set(global.par = TRUE)
+opts_chunk$set(comment = NA)
+
+library(tidyr)
+library(dplyr)
+library(Hmisc)
+library(reshape2)
+library(corrplot)
+# Global ggplot options
+library(ggplot2)
+theme_set(theme_minimal(base_size = 22))
+```
+
+## Features
+  - Per captia beds = beds / popul
+  - Per captia phys = phys / popul
+  - Dropped Columns:
+    - totalincome
+    - state
+
+Many of the total features such as area, total number of hospital beds, number of physicians have been divided by the population.
+```{r}
+set.seed(1313)
+data <- read.table('./data18.txt')
+colnames(data)<-c("id","county","state","area","popul","pop1834","pop65plus","phys","beds","crimes","higrads","bachelors","poors","unemployed","percapitaincome","totalincome","region")
+
+# Data transformations
+data$crm1000 <- 1000 * data$crimes / data$popul
+data$percapitabeds <- data$beds / data$popul
+data$percapitaphys <- data$phys / data$popul
+data$percapitaarea <- data$area / data$popul
+#data$areaperyoung <- data$area / (data$popul * data$pop1834)
+
+data$region <- factor(data$region, labels = c("northeast", "midwest", "south", "west"))
+data$region <- relevel(data$region, "west")
+
+n <- nrow(data)
+shuffled_data <- data[sample(n), ]
+
+train_indices <- 1:round(0.8 * n)
+train <- shuffled_data[train_indices, ]
+# val_indices <- (round(0.7 * n) + 1):(round(0.85 * n))
+# validation <- shuffled_data[val_indices, ]
+test_indices <- (round(0.8 * n) + 1):n
+test <- shuffled_data[test_indices, ]
+```
+
+## Visualizations
+  - Target variable is $crm_{1000} = (crimes/popul) ∗ 1000$
+  
+Here we can see that we have one outlier for the target variable which is new york. Very high crime rate per 1000 people.
+```{r}
+boxplot(train$crm1000, main = "(Training) Crime rate per 1000")
+text(x = 1.155, y = 295, labels="King's County (NY)")
+train[which.max(train$crm1000),]
+```
+
+```{r}
+library(gplots)
+# Manually selected, remove the total columns
+sub_train <- train[, c("id", "crm1000", "percapitaarea", "popul","pop1834","pop65plus","percapitaphys","percapitabeds","higrads","bachelors","poors","unemployed","percapitaincome")]
+
+pairs(~ crm1000 + percapitaarea + popul + pop1834 + percapitabeds + poors + percapitaincome + region, data = train)
+
+distmat<-1 - cor_matrix
+hh<-heatmap.2(as.matrix(distmat), col=redgreen(75),cexRow=.5, key=FALSE, symkey=FALSE, trace = "none", main = "County Features Correlations")
+```
+
+
+```{r, eval=F}
+is_outlier <- function(x) {
+  return(x < quantile(x, 0.25) - 1.5 * IQR(x) | x > quantile(x, 0.75) + 1.5 * IQR(x))
+}
+
+# All outliers
+colSums(apply(Filter(is.numeric, train[-1]), 2, is_outlier))
+
+
+## Do this for log transform as well
+# There are lots of outliers
+melt(sub_train, id.vars = 1) %>%
+#  group_by(variable) %>%
+#  mutate(outlier = ifelse(is_outlier(value), id, as.numeric(NA))) %>%
+ggplot(aes(x = factor(0), y = value), data = .) +
+  facet_wrap(~ variable, scales = "free_y") +
+  geom_boxplot() +
+#  geom_text(aes(label = outlier), na.rm = TRUE, hjust = -0.3) +
+   theme(axis.title.x=element_blank(),
+    axis.text.x=element_blank(),
+    axis.ticks.x=element_blank())
+```
+
+### Full Model
+```{r}
+library(car)
+
+fm <- lm(crm1000 ~ percapitaarea + popul + pop1834 + pop65plus + percapitaphys + percapitabeds + higrads + bachelors + poors + unemployed + percapitaincome + region, data = train)
+summary(fm)
+plot(fm)
+vif(fm)
+
+summary(fm)
+summary(update(fm, . ~ . - bachelors - higrads - percapitaincome - pop65plus))
+
+# Drop Kings county from the model
+nokings_m <- lm(crm1000 ~ percapitaarea + popul + pop1834 + pop65plus + percapitaphys + percapitabeds + higrads + bachelors + poors + unemployed + percapitaincome + region, data = train[train$county != "Kings",])
+summary(nokings_m)
+plot(nokings_m)
+
+summary(nokings_m)
+summary(update(nokings_m, . ~ . - bachelors - higrads - percapitaincome - pop65plus))
+
+train["1",]
+lmi <- lm.influence(nokings_m)
+round(colMeans(lmi$coefficients) - lmi$coefficients["1",], 3)
+round(lmi$coefficients["1",], 3)
+
+
+# log crm1000 model
+#logfm <- lm(crm1000 ~ percapitaarea + popul + pop1834 + pop65plus + percapitaphys + percapitabeds + higrads + bachelors + poors + unemployed + percapitaincome + region, data = train)
+#summary(logfm)
+#plot(logfm)
+```
+
+
+## Remove variables based on correlation
+```{r}
+m2 <- lm(crm1000 ~ percapitaarea + log(popul) + pop1834 + percapitabeds + poors + percapitaincome + region, data = train)
+summary(m2)
+plot(m2)
+#train$pop1834
+#plot(m2)
+
+nokings_m2 <- lm(crm1000 ~ percapitaarea + log(popul) + pop1834 + percapitabeds + poors + percapitaincome + region, data = train[train$county != "Kings",])
+summary(nokings_m2)
+plot(nokings_m2)
+
+print(train[c("374", "282", "215"),c("county", "state", "percapitaarea", "popul", "pop1834", "percapitabeds", "poors", "percapitaincome", "region")])
+
+print(summary(train[,c("percapitaarea", "popul", "pop1834", "percapitabeds", "poors", "percapitaincome", "region")]))
+```
+
+## Backwards selection
+Same as the 
+```{r}
+mmbackwards <- step(fm, direction = "backward", trace = F)
+summary(mmbackwards)
+```
+
+## Transformations
+Transform the variables and see how adjusted R^2 changes.
+A log transformation of all of the numeric variables seemed to help R^2 the most.
+A backwards selection was run on the remaining log variable and none were dropped.
+```{r}
+print(summary(nokings_m2)$adj.r.squared)
+
+# pairs(~ crm1000 + log(percapitaarea) + log(popul) + pop1834 + percapitabeds + log(poors) + percapitaincome + region, data = train[train$county != "Kings",])
+
+t1 <- lm(crm1000 ~ log(percapitaarea) + log(popul) + pop1834 + percapitabeds + poors + percapitaincome + region, data = train[train$county != "Kings",])
+print(summary(t1)$adj.r.squared)
+t2 <- lm(crm1000 ~ log(percapitaarea) + log(popul) + pop1834 + log(percapitabeds) + poors + percapitaincome + region, data = train[train$county != "Kings",])
+print(summary(t2)$adj.r.squared)
+t3 <- lm(crm1000 ~ log(percapitaarea) + log(popul) + pop1834 + log(percapitabeds) + poors + log(percapitaincome) + region, data = train[train$county != "Kings",])
+print(summary(t3)$adj.r.squared)
+t4 <- lm(crm1000 ~ log(percapitaarea) + log(popul) + log(pop1834) + log(percapitabeds) + log(poors) + log(percapitaincome) + region, data = train[train$county != "Kings",])
+print(summary(t4)$adj.r.squared)
+t5 <- lm(crm1000 ~ log(percapitaarea) + log(popul) + log(pop1834) + log(percapitabeds) + log(poors) + log(percapitaincome) + log(percapitaincome) + region + log(percapitaarea):region + log(popul):region + log(pop1834):region + log(percapitabeds):region + log(poors):region + log(percapitaincome):region, data = train[train$county != "Kings",])
+t6 <- lm(crm1000 ~ (log(percapitaarea) + log(popul) + 
+    log(pop1834) + log(percapitabeds) + log(poors) + log(percapitaincome) + 
+    region)^2,  data = train[train$county != "Kings",])
+
+#summary(t5)
+print(summary(t5)$adj.r.squared)
+interactions_m <- step(t5, direction = "backward", trace = F)
+interactions_full_m <- step(t6, direction = "backward", trace = F)
+
+print(summary(interactions_m)$adj.r.squared)
+print(summary(interactions_full_m)$adj.r.squared)
+summary(interactions_full_m)
+```
+
+## Interactions
+```{r}
+coplot(crm1000 ~ log(popul)|region, data = train)
+coplot(crm1000 ~ log(percapitaincome)|region, data = train)
+
+# F-tests show that we SHOULD include the interaction terms
+# (Reject the null hypothesis)
+anova(t4, interactions_m)
+anova(t4, interactions_full_m)
+```
+
+### Centering
+```{r}
+train_centered <- Filter(is.numeric, train[-1])
+# Log transformations applied to variables
+log_vars <- c("percapitaarea", "popul", "pop1834", "percapitabeds", "poors", "percapitaincome")
+log_vars_new_names <- paste0("log_", log_vars)
+
+train_centered[, log_vars_new_names] <- log(train_centered[, c("percapitaarea", "popul", "pop1834", "percapitabeds", "poors", "percapitaincome")])
+
+no_crm1000 <- select(train_centered, -crm1000)
+
+no_crm1000 <- no_crm1000 - matrix(rep(colMeans(train_centered), nrow(train)), nrow = nrow(train), byrow = T)
+# Add region back
+train_centered <- cbind(crm1000 = train_centered$crm1000, no_crm1000, region=train$region)
+
+all_region_inter_m <- lm(crm1000 ~ log_percapitaarea + log_popul + log_pop1834 + log_percapitabeds + log_poors + log_percapitaincome + log_percapitaincome + region + log_percapitaarea:region + log_popul:region + log_pop1834:region + log_percapitabeds:region + log_poors:region + log_percapitaincome:region, data = train_centered)
+all_inter_m <- lm(crm1000 ~ (log_percapitaarea + log_popul + 
+    log_pop1834 + log_percapitabeds + log_poors + log_percapitaincome + 
+    region)^2,  data = train_centered)
+
+interactions_m <- step(t5, direction = "backward", trace = F)
+interactions_full_m <- step(t6, direction = "backward", trace = F)
+
+inter_centered_region_m <- lm(formula =crm1000 ~ log_percapitaarea + log_popul + log_pop1834 + 
+    log_percapitabeds + log_poors + log_percapitaincome + region + 
+    log_percapitaarea:region + log_popul:region + log_percapitabeds:region + 
+    log_poors:region, data = train_centered)
+
+inter_centered_full_m <- lm(formula = crm1000 ~ log_percapitaarea + log_popul + log_pop1834 + log_percapitabeds + log_poors + log_percapitaincome + region + 
+    log_percapitaarea:log_popul + log_percapitaarea:log_pop1834 + 
+    log_percapitaarea:log_percapitabeds + log_percapitaarea:log_poors + 
+    log_percapitaarea:log_percapitaincome + log_percapitaarea:region + 
+    log_popul:log_percapitabeds + log_popul:log_poors + log_popul:log_percapitaincome + 
+    log_popul:region + log_pop1834:log_percapitaincome + log_pop1834:region + 
+    log_percapitabeds:log_percapitaincome + log_percapitabeds:region + 
+    log_poors:log_percapitaincome + log_poors:region, data = train_centered)
+```
+
+### Models
+```{r}
+full_form <- crm1000 ~ percapitaarea + popul + pop1834 + pop65plus + percapitaphys + percapitabeds + higrads + bachelors + poors + unemployed + percapitaincome + region
+
+trans_form <- crm1000 ~ log(percapitaarea) + log(popul) + log(pop1834) + log(percapitabeds) + log(poors) + log(percapitaincome) + region
+
+inter_form <- crm1000 ~ log(percapitaarea) + log(popul) + 
+    log(pop1834) + log(percapitabeds) + log(poors) + log(percapitaincome) + 
+    region + log(popul):region + log(percapitaincome):region
+
+inter_full_form <- crm1000 ~ log(percapitaarea) + log(popul) + 
+    log(pop1834) + log(percapitabeds) + log(poors) + log(percapitaincome) + 
+    region + log(popul):log(percapitabeds) + log(popul):log(poors) + 
+    log(popul):log(percapitaincome) + log(popul):region + 
+    log(pop1834):region + log(percapitabeds):region + log(poors):log(percapitaincome) + 
+    log(poors):region
+
+inter_centered_form <- crm1000 ~ log(percapitaarea) + log(popul) + log(pop1834) + 
+    log(percapitabeds) + log(poors) + log(percapitaincome) + region + 
+    log(percapitaarea):region + log(popul):region + log(percapitabeds):region + 
+    log(poors):region
+
+inter_centered_full_form <- crm1000 ~ log(percapitaarea) + log(popul) + log(pop1834) + log(percapitabeds) + log(poors) + log(percapitaincome) + region + 
+    log(percapitaarea):log(popul) + log(percapitaarea):log(pop1834) + 
+    log(percapitaarea):log(percapitabeds) + log(percapitaarea):log(poors) + 
+    log(percapitaarea):log(percapitaincome) + log(percapitaarea):region + 
+    log(popul):log(percapitabeds) + log(popul):log(poors) + log(popul):log(percapitaincome) + 
+    log(popul):region + log(pop1834):log(percapitaincome) + log(pop1834):region + 
+    log(percapitabeds):log(percapitaincome) + log(percapitabeds):region + 
+    log(poors):log(percapitaincome) + log(poors):region
+
+simple_form <- crm1000 ~ log(poors)
+```
+
+
+### K-fold cross validation
+We are going to compare 3 models:
+  - The full model without transformations
+  - The best transformation model (also the one found by backward step)
+  - An extremely simple model (only using poor)
+```{r}
+K <- 10
+
+formulas <- c(simple_form, trans_form, inter_form, inter_full_form, inter_centered_form, inter_centered_full_form, full_form)
+
+Prederrors <- as.data.frame(matrix(0,K,length(formulas)))
+colnames(Prederrors) <- c("Simple", "Additive", "RegionInter", "AllInter", "RegionInterCenter", "AllInterCenter", "Full")
+
+shuffledTrain <- train[sample(nrow(train)),]
+folds <- cut(seq(1,nrow(shuffledTrain)),breaks=K,labels=FALSE)
+
+for(i in 1:K){
+    #Segement your data by fold using the which() function 
+    testIndexes <- which(folds==i,arr.ind=TRUE)
+    testData <- shuffledTrain[testIndexes, ]
+    trainData <- shuffledTrain[-testIndexes, ]
+    
+    for(j in 1:length(formulas)) {
+      m <- lm(formulas[[j]], data = trainData)
+      preds <- predict(m, testData)
+      mse <- mean((preds - testData$crm1000)^2)
+      Prederrors[i,j] <- mse
+    }
+}
+
+colMeans(Prederrors)
+```
+
+### LOOCV
+```{r}
+loocvErrors <- sapply(c("Simple", "Additive", "RegionInter", "AllInter", "Full"),function(x) 0.0)
+
+
+models <- lapply(formulas, function(f) {
+  lm(f, data = train)
+  })
+
+for (j in 1:length(formulas)) {
+  m <- models[[j]]
+  loocvErrors[j] <- mean(((train$crm1000 - m$fitted.values)/(1 - hatvalues(m)))^2)
+}
+loocvErrors
+```
+
+## Model Interpretation
+```{r}
+log_formula <- crm1000 ~ log(percapitaarea) + log(popul) + log(pop1834) + log(percapitabeds) + log(poors) + log(percapitaincome) + region
+log_mt <- lm(log_formula, data = train)
+summary(log_mt)
+```
+  - Let's look at what these parameters actually mean. Since we are working on a log scale we can interpret the estimate $\beta_{area}$ for log(percapitaarea) as the change in crime rate per 1000, $crm_{1000}$, when $log(percapitaarea)$ increases by 1. That is, $ln x_{area} + 1 = ln(e x_{area})$. So if $x_{area}$ is _multiplied_ by $e \approx 2.718$, then $crm_{1000}$ increases by $\beta_{area}$.
+  - We can summarize this easier with some examples:
+    - If the per captia area increases by 10%, then the crime rate per 1000 people will _decrease_ by 0.49. $\beta_{area} \cdot ln(1.10) = -5.127 \cdot ln(1.10) = -0.49$.
+
+```{r}
+num_coeff <- summary(log_mt)$coeff[2:7,"Estimate"]
+inc_amt <- cbind(num_coeff * log(1.05), num_coeff * log(1.10), num_coeff * log(1.20), num_coeff * log(1.30))
+colnames(inc_amt) <- c("5%", "10%", "20%", "30%")
+rownames(inc_amt) <- c("percapitaarea", "popul", "pop1834", "percapitabeds", "poors", "percapitaincome")
+kable(inc_amt, digits = 3, caption = "Change in crime rate by percentage increase")
+```
+
+From this table we can see that if the the percentage of poor people increased from 20 to 22, we would expect to see an increase of 2.428 in the number of crimes per 1000 people.
+We can also see that if the per captia area increases from $5 \times 10^{-3}$ to $5.5 \times 10^{-3}$ we would expect the number of crimes per 1000 people to _drop_ by 0.489.
+
+## GLM
+```{r}
+library(MASS)
+library(AER)
+
+
+#round(train$crm1000)
+pois_glm <- glm(crimes ~ offset(log(popul / 1000)) + log(percapitaarea) + log(popul) + log(pop1834) + log(percapitabeds) + log(poors) + log(percapitaincome) + region, data = train, family = "poisson")
+summary(pois_glm)
+
+dispersiontest(pois_glm, alternative = "two.sided")
+
+
+# Same model but predicting NB
+nb_glm <- glm.nb(crimes ~ offset(log(popul / 1000)) + log(percapitaarea) + log(popul) + log(pop1834) + log(percapitabeds) + log(poors) + log(percapitaincome) + region, data = train, x = TRUE)
+
+nb_glm2 <- glm.nb(crimes ~ log(percapitaarea) + log(popul) + log(pop1834) + log(percapitabeds) + log(poors) + log(percapitaincome) + region, data = train, x = TRUE)
+
+# Equivalent ways of predicting the rates
+# exp(nb_glm$x %*% nb_glm$coefficients)
+# 1000 * nb_glm$fitted.values / train$popul
+
+#nb_glm$fitted.values
+summary(nb_glm)
+summary(nb_glm2)
+
+train[which.max(cooks.distance(nb_glm)), ]
+
+var(train$crimes)
+mean(train$crimes)
+```
+
+### K-fold cross validation including NB model
+```{r}
+K <- 10
+
+formulas <- c(simple_form, trans_form, inter_form, inter_full_form, inter_centered_form, inter_centered_full_form, full_form)
+
+Prederrors <- as.data.frame(matrix(0,K,length(formulas) + 1))
+colnames(Prederrors) <- c("Simple", "Additive", "RegionInter", "AllInter", "RegionInterCenter", "AllInterCenter","Full", "NB")
+
+shuffledTrain <- train[sample(nrow(train)),]
+folds <- cut(seq(1,nrow(shuffledTrain)),breaks=K,labels=FALSE)
+
+for(i in 1:K){
+    #Segement your data by fold using the which() function 
+    testIndexes <- which(folds==i,arr.ind=TRUE)
+    testData <- shuffledTrain[testIndexes, ]
+    trainData <- shuffledTrain[-testIndexes, ]
+    
+    for(j in 1:length(formulas)) {
+      m <- lm(formulas[[j]], data = trainData)
+      preds <- predict(m, testData)
+      mse <- mean((preds - testData$crm1000)^2)
+      Prederrors[i,j] <- mse
+    }
+    
+    nb_glm <- glm.nb(crimes ~ offset(log(popul / 1000)) + log(percapitaarea) + log(popul) + log(pop1834) + log(percapitabeds) + log(poors) + log(percapitaincome) + region, data = trainData)
+    preds <- 1000 * predict(nb_glm, testData, type="response") / testData$popul
+    mse <- mean((preds - testData$crm1000)^2)
+    Prederrors[i,8] <- mse
+}
+
+res <- colMeans(Prederrors)
+res[order(res)]
+```
