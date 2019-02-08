@@ -662,3 +662,13 @@ other and the red variables are positively correlated.
 
 ![image](./figures/unnamed-chunk-26-1.png) We can see
 that Kings county is high for its region and overall.
+
+
+## References
+
+  1) Alan Agresti. Categorical data analysis. A Wiley-Interscience publication. Wiley, New York [u.a.], 1990.
+  2) Gareth James, Daniela Witten, Trevor Hastie, and Robert Tibshirani. An Introduction to Statistical
+Learning: With Applications in R. Springer Publishing Company, Incorporated, 2014.
+  3) Philippe Rigollet. Statistics for applications, Fall 2016.
+  4) Wikipedia contributors. Variance inflation factor — Wikipedia, the free encyclopedia. [https://en.wikipedia.org/w/index.php?title=Variance_inflation_factor&oldid=878147754](https://en.wikipedia.org/w/index.php?title=Variance_inflation_factor&oldid=878147754), 2019. [Online; accessed
+13-January-2019].
