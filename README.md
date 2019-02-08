@@ -236,7 +236,7 @@ seems to be a slightly smaller slope in the West panel, but overall it
 is not clear that the interactions are needed.
 
 ![Conditional Plot of crime rate, for log(popul) given
-region](./latex/project_files/figure-latex/unnamed-chunk-7-1.pdf)
+region](./figures/unnamed-chunk-7-1.pdf)
 <span id="fig:coplot" label="fig:coplot">\[fig:coplot\]</span>
 
 Our original cross validation was performed on data that was not
@@ -390,7 +390,7 @@ percentage changing than just the estimated coefficients. This can be
 seen in Figure [\[fig:vary\_poor\]](#fig:vary_poor)
 
 ![Varying the poor percentage while keeping all other variables at the
-mean values](./latex/project_files/figure-latex/unnamed-chunk-12-1.pdf)
+mean values](./figures/unnamed-chunk-12-1.pdf)
 <span id="fig:vary_poor" label="fig:vary_poor">\[fig:vary\_poor\]</span>
 
 ## Cross Validation
@@ -515,7 +515,7 @@ other variables at the mean) while varying only the population. We range
 the population from the minimum 100,043 to the maximum 8,863,164.
 
 ![Varying the population while keeping all other variables at the mean
-values](./latex/project_files/figure-latex/unnamed-chunk-18-1.pdf)
+values](./figures/unnamed-chunk-18-1.pdf)
 <span id="fig:vary_popul" label="fig:vary_popul">\[fig:vary\_popul\]</span>
 
 ## Conclusion
@@ -567,7 +567,7 @@ Midwest.
 
 <span id="studentized-residuals" label="studentized-residuals">\[studentized-residuals\]</span>
 
-![image](./latex/project_files/figure-latex/unnamed-chunk-20-1.pdf)
+![image](./figures/unnamed-chunk-20-1.pdf)
 
 | county     | state | Student Residuals |
 | :--------- | :---- | ----------------: |
@@ -595,7 +595,7 @@ error.
 
 ## DFBETA on continuous coefficients
 
-![image](./latex/project_files/figure-latex/unnamed-chunk-21-1.pdf)
+![image](./figures/unnamed-chunk-21-1.pdf)
 
 | county                                                               | coefficient          |  DFBETA |
 | :------------------------------------------------------------------- | :------------------- | ------: |
@@ -636,7 +636,7 @@ look at the data, we see that Monroe has 45.8% of its population between
 and has some of the most extreme values. It is by far the most
 influential and extreme point in the data.
 
-![image](./latex/project_files/figure-latex/unnamed-chunk-23-1.pdf)
+![image](./figures/unnamed-chunk-23-1.pdf)
 
 We can see from the diagnostic plots that the residuals and fitted
 values are approximately symmetric and the residuals don’t appear to be
@@ -653,12 +653,12 @@ as an issue as its residual is so high.
 
 ## Correlations
 
-![image](./latex/project_files/figure-latex/unnamed-chunk-25-1.pdf) This
+![image](./figures/unnamed-chunk-25-1.pdf) This
 clustered distance matrix was how we selected which variables to remove
 from the model. The blue variables are negatively correlated with each
 other and the red variables are positively correlated.
 
 ## Outliers
 
-![image](./latex/project_files/figure-latex/unnamed-chunk-26-1.pdf) We can see
+![image](./figures/unnamed-chunk-26-1.pdf) We can see
 that Kings county is high for its region and overall.
